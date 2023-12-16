@@ -3,10 +3,10 @@
 #include "cuda_transform.h"
 #include <pcl/io/pcd_io.h>
 #include <chrono>
-bool transform(pcl::PointCloud<pcl::PointXYZ> &point_cloud, Eigen::Affine3f matrix) // 变换点云
+bool transform(pcl::PointCloud<PointXYZIRT> &point_cloud, Eigen::Affine3f matrix) // 变换点云
 {
     int threads;                  // 线程数
-    pcl::PointXYZ *d_point_cloud; // 点云,设备DEVICE
+    PointXYZIRT *d_point_cloud; // 点云,设备DEVICE
 
     float h_m[16]; // 矩阵,主机HOST
     float *d_m;       // 矩阵,设备DEVICE
@@ -52,11 +52,11 @@ bool transform(pcl::PointCloud<pcl::PointXYZ> &point_cloud, Eigen::Affine3f matr
     if (err != ::cudaSuccess)
         return false;
 
-    err = cudaMalloc((void **)&d_point_cloud, point_cloud.points.size() * sizeof(pcl::PointXYZ)); // 为点云分配内存
+    err = cudaMalloc((void **)&d_point_cloud, point_cloud.points.size() * sizeof(PointXYZIRT)); // 为点云分配内存
     if (err != ::cudaSuccess)
         return false;
 
-    err = cudaMemcpy(d_point_cloud, point_cloud.points.data(), point_cloud.points.size() * sizeof(pcl::PointXYZ), cudaMemcpyHostToDevice); // 将点云数据从主机复制到设备
+    err = cudaMemcpy(d_point_cloud, point_cloud.points.data(), point_cloud.points.size() * sizeof(PointXYZIRT), cudaMemcpyHostToDevice); // 将点云数据从主机复制到设备
     if (err != ::cudaSuccess)
         return false;
 
@@ -70,7 +70,7 @@ bool transform(pcl::PointCloud<pcl::PointXYZ> &point_cloud, Eigen::Affine3f matr
     }
     auto end_time = std::chrono::high_resolution_clock::now();
     std::cout << "cudaTransformPoints time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count() << " ms" << std::endl;
-    err = cudaMemcpy(point_cloud.points.data(), d_point_cloud, point_cloud.points.size() * sizeof(pcl::PointXYZ), cudaMemcpyDeviceToHost); // 将点云数据从设备复制到主机
+    err = cudaMemcpy(point_cloud.points.data(), d_point_cloud, point_cloud.points.size() * sizeof(PointXYZIRT), cudaMemcpyDeviceToHost); // 将点云数据从设备复制到主机
     if (err != ::cudaSuccess)
         return false;
 
@@ -81,6 +81,88 @@ bool transform(pcl::PointCloud<pcl::PointXYZ> &point_cloud, Eigen::Affine3f matr
     err = cudaFree(d_point_cloud);
     d_point_cloud = NULL;
     if (err != ::cudaSuccess)
+        return false;
+
+    return true;
+}
+
+bool mergePointCloudsCUDA(int threads,
+                          const pcl::PointCloud<PointXYZIRT>::Ptr& cloudA,
+                          const pcl::PointCloud<PointXYZIRT>::Ptr& cloudB,
+                          pcl::PointCloud<PointXYZIRT>::Ptr& mergedCloud)
+{
+    PointXYZIRT *d_cloudA, *d_cloudB, *d_mergedCloud;
+
+    cudaError_t err = cudaSetDevice(0);
+    if (err != cudaSuccess)
+        return false;
+
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+    threads = prop.maxThreadsPerBlock;
+
+    err = cudaMalloc((void **)&d_cloudA, cloudA->size() * sizeof(PointXYZIRT));
+    if (err != cudaSuccess)
+        return false;
+
+    err = cudaMalloc((void **)&d_cloudB, cloudB->size() * sizeof(PointXYZIRT));
+    if (err != cudaSuccess)
+        return false;
+
+    size_t dataSize = (cloudA->size() + cloudB->size()) * sizeof(PointXYZIRT);
+    err = cudaMalloc((void **)&d_mergedCloud, dataSize);
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA 错误: " << cudaGetErrorString(err) << " 在为 d_mergedCloud 进行 cudaMalloc 时" << std::endl;
+        return false;
+    }
+
+
+    err = cudaMemcpy(d_cloudA, cloudA->points.data(), cloudA->size() * sizeof(PointXYZIRT), cudaMemcpyHostToDevice);
+    if (err != cudaSuccess)
+        return false;
+
+    err = cudaMemcpy(d_cloudB, cloudB->points.data(), cloudB->size() * sizeof(PointXYZIRT), cudaMemcpyHostToDevice);
+    if (err != cudaSuccess)
+        return false;
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+    err = cudaMergePoints(threads, d_cloudA, cloudA->size(),
+                          d_cloudB, cloudB->size(),
+                          d_mergedCloud);
+
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA 错误: " << cudaGetErrorString(err) << std::endl;
+        return false;
+    }
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::cout << "cudaMergePoints 执行时间: " << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count() << " 毫秒" << std::endl;
+    
+    if (d_mergedCloud == nullptr) {
+        std::cerr << "CUDA error: Device pointer is null." << std::endl;
+        return false;
+    }
+
+
+    err = cudaMemcpy(mergedCloud->points.data(), d_mergedCloud,
+                     dataSize,
+                     cudaMemcpyDeviceToHost);
+
+    if (err != cudaSuccess)
+   {
+        std::cerr << "CUDA cudaMemcpy error: " << cudaGetErrorString(err) << std::endl;
+        return false;
+    }
+    err = cudaFree(d_cloudA);
+    if (err != cudaSuccess)
+        return false;
+
+    err = cudaFree(d_cloudB);
+    if (err != cudaSuccess)
+        return false;
+
+    err = cudaFree(d_mergedCloud);
+    if (err != cudaSuccess)
         return false;
 
     return true;
