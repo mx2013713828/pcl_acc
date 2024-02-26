@@ -1,8 +1,10 @@
+#define PCL_NO_PRECOMPILE
 #include <iostream>
-#include "cuda_transform.h"
+#include "cuda_pcl.h"
 #include <pcl/io/pcd_io.h>
 #include <chrono>
 #include <pcl/common/transforms.h>
+#include <pcl/filters/voxel_grid.h>
 
 bool initializeCUDA() {
     cudaError_t err = cudaFree(0); // 使用一个简单的 CUDA 函数来触发初始化
@@ -38,7 +40,7 @@ int main()
     
     // pcl::io::savePCDFile<PointXYZIRT>("pcl_transformed.pcd", output);
     // auto start_time = std::chrono::system_clock::now();
-    // bool result = transform(*cloud, matrix);
+    // bool result = transformCUDA(*cloud, matrix);
     // auto end_time = std::chrono::system_clock::now();
     // std::cout << "CUDA::Transform took " << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count() << " ms" << std::endl;
     // pcl::io::savePCDFile<PointXYZIRT>("cuda_transformed.pcd", *cloud);
@@ -47,21 +49,21 @@ int main()
     pcl::PointCloud<PointXYZIRT>::Ptr mergedCloud(new pcl::PointCloud<PointXYZIRT>());
     // 读取点云数据
     pcl::PointCloud<PointXYZIRT>::Ptr testA(new pcl::PointCloud<PointXYZIRT>);
-    if ( (pcl::io::loadPCDFile<PointXYZIRT>("/home/sdlg/Database/SdlgProject/mayufeng/pcl_acc/test1.pcd", *testA)) == -1 )
+    if ( (pcl::io::loadPCDFile<PointXYZIRT>("../test1.pcd", *testA)) == -1 )
     {
       PCL_ERROR("Failed to read test1.pcd file\n");
       return -1;
     }    
 
     pcl::PointCloud<PointXYZIRT>::Ptr testB(new pcl::PointCloud<PointXYZIRT>);
-    if ( (pcl::io::loadPCDFile<PointXYZIRT>("/home/sdlg/Database/SdlgProject/mayufeng/pcl_acc/test2.pcd", *testB)) == -1 )
+    if ( (pcl::io::loadPCDFile<PointXYZIRT>("../test2.pcd", *testB)) == -1 )
     {
       PCL_ERROR("Failed to read test2.pcd file\n");
       return -1;
     }
 
     mergedCloud->points.resize(testA->size() + testB->size());
-    std::cout<<mergedCloud->size()<<std::endl;
+    // std::cout<<mergedCloud->size()<<std::endl;
     auto start_merge = std::chrono::system_clock::now();
 
     bool success = mergePointCloudsCUDA(256, testA, testB, mergedCloud);
@@ -75,13 +77,45 @@ int main()
         std::cerr << "PointCloud merge failed." << std::endl;
     }
 
-    std::cout<<testB->points[63998].ring<<std::endl;
+    //测试处理后点云数值与pcl库操作是否相同
+    // std::cout<<testB->points[63998].ring<<std::endl;
     mergedCloud->width = mergedCloud->size();
     mergedCloud->height = 1;
     auto end_merge = std::chrono::system_clock::now();
     std::cout << "PCL::merge took " << std::chrono::duration_cast<std::chrono::milliseconds>(end_merge - start_merge).count() << " ms" << std::endl;
     
-    pcl::io::savePCDFile<PointXYZIRT>("cuda_merged.pcd", *mergedCloud);
+    pcl::PointCloud<PointXYZIRT>::Ptr testC(new pcl::PointCloud<PointXYZIRT>());
+    pcl::PointCloud<PointXYZIRT>::Ptr cuda_mergedpts(new pcl::PointCloud<PointXYZIRT>());
 
-    return 0;
+    cuda_mergedpts->points.resize(testA->size() + testC->size());
+
+    success = cuda_merge_points( 256,testA,testC,cuda_mergedpts);
+    if (success) {
+        // 在这里，mergedCloud 包含了合并后的点云数据
+        std::cout << "PointCloud merge successful." << std::endl;
+
+        // 可以继续处理或显示合并后的点云
+    } else {
+        std::cerr << "PointCloud merge failed." << std::endl;
+    }
+    // pcl::io::savePCDFile<PointXYZIRT>("../cuda_merged.pcd", *mergedCloud);
+
+
+    // pcl::PointCloud<PointXYZIRT>::Ptr cloud(new pcl::PointCloud<PointXYZIRT>);
+    // if ( (pcl::io::loadPCDFile<PointXYZIRT>("../test1.pcd", *cloud)) == -1 )
+    // {
+    //   PCL_ERROR("Failed to read test.pcd file\n");
+    //   return -1;
+    // }
+
+    // std::cout << "Input Point Cloud size: " << cloud->size() << " points" << std::endl;
+    // // 创建Voxel Grid滤波器
+    // pcl::VoxelGrid<PointXYZIRT> sor;
+    // sor.setInputCloud(cloud);
+    // sor.setLeafSize(0.1f, 0.1f, 0.1f);  // 设置降采样的体素大小
+    // pcl::PointCloud<PointXYZIRT>::Ptr downsampled_cloud(new pcl::PointCloud<PointXYZIRT>);
+
+    // sor.filter(*downsampled_cloud);
+    return 0; 
+
 }
