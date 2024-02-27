@@ -29,6 +29,7 @@ set(SOURCE_FILES cuda_pcl.cpp cuda_pcl.cu cuda_pcl.h)
 
 # 编译可执行文件
 cuda_add_executable(YourExecutable main.cpp cuda_pcl.cpp cuda_pcl.cu)
+# cuda_add_executable(YourExecutable main.cpp SOURCE_FILES)
 
 # 链接CUDA和PCL库
 target_link_libraries(YourExecutable ${CUDA_LIBRARIES} ${PCL_LIBRARIES})

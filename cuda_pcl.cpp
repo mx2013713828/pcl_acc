@@ -3,7 +3,7 @@
 #include "cuda_pcl.h"
 #include <pcl/io/pcd_io.h>
 #include <chrono>
-bool transformCUDA(pcl::PointCloud<PointXYZIRT> &point_cloud, Eigen::Affine3f matrix) // 变换点云
+bool cuda_transform_points(pcl::PointCloud<PointXYZIRT> &point_cloud, Eigen::Affine3f matrix) // 变换点云
 {
     int threads;                  // 线程数
     PointXYZIRT *d_point_cloud; // 点云,设备DEVICE
@@ -61,7 +61,7 @@ bool transformCUDA(pcl::PointCloud<PointXYZIRT> &point_cloud, Eigen::Affine3f ma
         return false;
 
     auto start_time = std::chrono::high_resolution_clock::now();
-    err = cudaTransformPoints(threads, d_point_cloud, point_cloud.points.size(), d_m); // 变换点云,这里面的算法在另一个文件中
+    err = cuda_transform_points_kernel_launch(threads, d_point_cloud, point_cloud.points.size(), d_m); // 变换点云,这里面的算法在另一个文件中
     // if (err != ::cudaSuccess)
     //     return false;
     if (err != ::cudaSuccess) {
@@ -81,88 +81,6 @@ bool transformCUDA(pcl::PointCloud<PointXYZIRT> &point_cloud, Eigen::Affine3f ma
     err = cudaFree(d_point_cloud);
     d_point_cloud = NULL;
     if (err != ::cudaSuccess)
-        return false;
-
-    return true;
-}
-
-bool mergePointCloudsCUDA(int threads,
-                          const pcl::PointCloud<PointXYZIRT>::Ptr& cloudA,
-                          const pcl::PointCloud<PointXYZIRT>::Ptr& cloudB,
-                          pcl::PointCloud<PointXYZIRT>::Ptr& mergedCloud) // 拼接点云,等于pcl库中点云的'+'运算
-{
-    PointXYZIRT *d_cloudA, *d_cloudB, *d_mergedCloud;
-
-    cudaError_t err = cudaSetDevice(0);
-    if (err != cudaSuccess)
-        return false;
-
-    cudaDeviceProp prop;
-    cudaGetDeviceProperties(&prop, 0);
-    threads = prop.maxThreadsPerBlock;
-
-    err = cudaMalloc((void **)&d_cloudA, cloudA->size() * sizeof(PointXYZIRT));
-    if (err != cudaSuccess)
-        return false;
-
-    err = cudaMalloc((void **)&d_cloudB, cloudB->size() * sizeof(PointXYZIRT));
-    if (err != cudaSuccess)
-        return false;
-
-    size_t dataSize = (cloudA->size() + cloudB->size()) * sizeof(PointXYZIRT);
-    err = cudaMalloc((void **)&d_mergedCloud, dataSize);
-    if (err != cudaSuccess) {
-        std::cerr << "CUDA 错误: " << cudaGetErrorString(err) << " 在为 d_mergedCloud 进行 cudaMalloc 时" << std::endl;
-        return false;
-    }
-
-
-    err = cudaMemcpy(d_cloudA, cloudA->points.data(), cloudA->size() * sizeof(PointXYZIRT), cudaMemcpyHostToDevice);
-    if (err != cudaSuccess)
-        return false;
-
-    err = cudaMemcpy(d_cloudB, cloudB->points.data(), cloudB->size() * sizeof(PointXYZIRT), cudaMemcpyHostToDevice);
-    if (err != cudaSuccess)
-        return false;
-
-    auto start_time = std::chrono::high_resolution_clock::now();
-    err = cudaMergePoints(threads, d_cloudA, cloudA->size(),
-                          d_cloudB, cloudB->size(),
-                          d_mergedCloud);
-
-    if (err != cudaSuccess) {
-        std::cerr << "CUDA 错误: " << cudaGetErrorString(err) << std::endl;
-        return false;
-    }
-
-    auto end_time = std::chrono::high_resolution_clock::now();
-    std::cout << "cudaMergePoints 执行时间: " << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count() << " 毫秒" << std::endl;
-    
-    if (d_mergedCloud == nullptr) {
-        std::cerr << "CUDA error: Device pointer is null." << std::endl;
-        return false;
-    }
-
-
-    err = cudaMemcpy(mergedCloud->points.data(), d_mergedCloud,
-                     dataSize,
-                     cudaMemcpyDeviceToHost);
-
-    if (err != cudaSuccess)
-   {
-        std::cerr << "CUDA cudaMemcpy error: " << cudaGetErrorString(err) << std::endl;
-        return false;
-    }
-    err = cudaFree(d_cloudA);
-    if (err != cudaSuccess)
-        return false;
-
-    err = cudaFree(d_cloudB);
-    if (err != cudaSuccess)
-        return false;
-
-    err = cudaFree(d_mergedCloud);
-    if (err != cudaSuccess)
         return false;
 
     return true;
@@ -225,7 +143,7 @@ bool cuda_merge_points(int threads,
     }
     // if (threads > prop.maxThreadsPerBlock) threads = prop.maxThreadsPerBlock;
 
-    err = cudaMergePoints(threads, d_cloudA, cloudA->size(),
+    err = cuda_merge_points_kernel_launch(threads, d_cloudA, cloudA->size(),
                           d_cloudB, cloudB->size(),
                           d_mergedCloud);
 
@@ -262,5 +180,75 @@ bool cuda_merge_points(int threads,
 }
 
 
+bool cuda_crop_points(int threads,
+                      const pcl::PointCloud<PointXYZIRT>::Ptr& input_cloud,
+                      pcl::PointCloud<PointXYZIRT>::Ptr& output_cloud,
+                      float min_x, float max_x, float min_y, float max_y) {
+    PointXYZIRT *d_input_cloud = nullptr, *d_output_cloud = nullptr;
+    cudaError_t err = cudaSetDevice(0);
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA set device error: " << cudaGetErrorString(err) << std::endl;
+        return false;
+    }
+
+    int host_output_size = 0; // 定义主机端的 output_size，初始值为 0
+    int *d_output_size;
+    cudaMalloc(&d_output_size, sizeof(int)); // 在设备端分配内存，用于存储输出大小
+    cudaMemcpy(d_output_size, &host_output_size, sizeof(int), cudaMemcpyHostToDevice); // 将主机端的 output_size 复制到设备端
+
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+
+    err = cudaMalloc((void **)&d_input_cloud, input_cloud->size() * sizeof(PointXYZIRT));
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA malloc d_input_cloud error: " << cudaGetErrorString(err) << std::endl;
+        return false;
+    }
+
+    err = cudaMalloc((void **)&d_output_cloud, input_cloud->size() * sizeof(PointXYZIRT));
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA malloc d_output_cloud error: " << cudaGetErrorString(err) << std::endl;
+        cudaFree(d_input_cloud); 
+        return false;
+    }
+
+    size_t dataSize = input_cloud->size() * sizeof(PointXYZIRT);
+    err = cudaMemcpy(d_input_cloud, input_cloud->points.data(), dataSize, cudaMemcpyHostToDevice);
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA memcpy input_cloud to device error: " << cudaGetErrorString(err) << std::endl;
+        cudaFree(d_output_cloud);
+        cudaFree(d_input_cloud);
+        return false;
+    }
+
+    // 调用点云裁剪核函数
+    err = cuda_crop_points_kernel_launch(threads, d_input_cloud, input_cloud->size(), d_output_cloud, d_output_size, min_x, max_x, min_y, max_y);
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA kernel launch error: " << cudaGetErrorString(err) << std::endl;
+        cudaFree(d_output_cloud);
+        cudaFree(d_input_cloud);
+        return false;
+    }
+
+    // 将输出大小从设备端复制回主机端
+    cudaMemcpy(&host_output_size, d_output_size, sizeof(int), cudaMemcpyDeviceToHost);
+    std::cout << "Output size after crop: " << host_output_size << std::endl;
+
+    // 复制裁剪后的点云数据回主机内存
+    output_cloud->points.resize(host_output_size);
+    err = cudaMemcpy(output_cloud->points.data(), d_output_cloud, host_output_size * sizeof(PointXYZIRT), cudaMemcpyDeviceToHost);
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA memcpy device to host error: " << cudaGetErrorString(err) << std::endl;
+        cudaFree(d_output_cloud);
+        cudaFree(d_input_cloud);
+        return false;
+    }
 
 
+
+
+    cudaFree(d_output_cloud);
+    cudaFree(d_input_cloud);
+    
+    return true;
+}

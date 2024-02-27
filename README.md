@@ -24,6 +24,13 @@ PCL is a library for 2D/3D processing and analysis of point clouds,but it is slo
 
 ## ChangeLog
 
+#### 2024-02-27
+completed PCL crop algorithm.
+
+Attention:every variable in kernel function must copy to device.
+
+- [x] PCL `crop`
+
 #### 2024-02-22
 Establish the project.
 
