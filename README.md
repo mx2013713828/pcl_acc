@@ -65,7 +65,7 @@ CUDA
 ```bash
 1、edit the CMakeLists.txt to add the path of PCL and CUDA
 2、edit the PointCloud type in function.
-3、run the cmake and make.
+3、mkdir build && cd build  then run the cmake and make.
 4、./YourExecutable
 ```
 

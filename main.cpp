@@ -113,10 +113,16 @@ int main()
     float min_y = 20;
     float max_x = 100;
     float max_y = 100;
+    auto start_crop = std::chrono::system_clock::now();
+
     bool success = cuda_crop_points(256,
                                     cloud,
                                     output,
                             min_x, max_x, min_y, max_y);
+
+    auto end_crop = std::chrono::system_clock::now();
+    std::cout << "PCL::merge took " << std::chrono::duration_cast<std::chrono::milliseconds>(end_crop - start_crop).count() << " ms" << std::endl;
+    
 
     if (success) {
         // 在这里，mergedCloud 包含了合并后的点云数据
