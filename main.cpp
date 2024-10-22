@@ -102,7 +102,7 @@ int main()
 
 
     pcl::PointCloud<PointXYZIRT>::Ptr cloud(new pcl::PointCloud<PointXYZIRT>);
-    if ( (pcl::io::loadPCDFile<PointXYZIRT>("../test1.pcd", *cloud)) == -1 )
+    if ( (pcl::io::loadPCDFile<PointXYZIRT>("/home/sdlg/mayufeng/SdlgProject/PointCloutProject/pcl_acc/test1.pcd", *cloud)) == -1 )
     {
       PCL_ERROR("Failed to read test.pcd file\n");
       return -1;
