@@ -20,23 +20,23 @@ int main()
     if (!initializeCUDA()) {
         return 1; // CUDA 初始化失败，程序终止
     }
-      
+
     // 读取点云数据
-    // pcl::PointCloud<PointXYZIRT>::Ptr cloud(new pcl::PointCloud<PointXYZIRT>);
-    // if ( (pcl::io::loadPCDFile<PointXYZIRT>("/home/sdlg/Database/SdlgProject/mayufeng/pcl_acc/test1.pcd", *cloud)) == -1 )
-    // {
-    //   PCL_ERROR("Failed to read test.pcd file\n");
-    //   return -1;
-    // }
+    pcl::PointCloud<PointXYZIRT>::Ptr cloudt(new pcl::PointCloud<PointXYZIRT>);
+    if ( (pcl::io::loadPCDFile<PointXYZIRT>("/home/sdlg/mayufeng/SdlgProject/PointCloutProject/pcl_acc/test1.pcd", *cloudt)) == -1 )
+    {
+      PCL_ERROR("Failed to read test.pcd file\n");
+      return -1;
+    }
 
-    // Eigen::Affine3f matrix = Eigen::Affine3f::Identity();
-    // matrix.translation() = Eigen::Vector3f(5.0, 5.0, 5.0);
-    // pcl::PointCloud<PointXYZIRT> output;
-    // auto start_transform = std::chrono::system_clock::now();
+    Eigen::Affine3f matrix = Eigen::Affine3f::Identity();
+    matrix.translation() = Eigen::Vector3f(5.0, 5.0, 5.0);
+    pcl::PointCloud<PointXYZIRT> outputt;
+    auto start_transform = std::chrono::system_clock::now();
 
-    // pcl::transformPointCloud(*cloud,output, matrix);
-    // auto end_transform = std::chrono::system_clock::now();
-    // std::cout << "PCL::Transform took " << std::chrono::duration_cast<std::chrono::milliseconds>(end_transform - start_transform).count() << " ms" << std::endl;
+    pcl::transformPointCloud(*cloudt,outputt, matrix);
+    auto end_transform = std::chrono::system_clock::now();
+    std::cout << "PCL::Transform took " << std::chrono::duration_cast<std::chrono::milliseconds>(end_transform - start_transform).count() << " ms" << std::endl;
     
     // pcl::io::savePCDFile<PointXYZIRT>("pcl_transformed.pcd", output);
     // auto start_time = std::chrono::system_clock::now();
@@ -121,9 +121,8 @@ int main()
                             min_x, max_x, min_y, max_y);
 
     auto end_crop = std::chrono::system_clock::now();
-    std::cout << "PCL::merge took " << std::chrono::duration_cast<std::chrono::milliseconds>(end_crop - start_crop).count() << " ms" << std::endl;
+    std::cout << "cuda crop took " << std::chrono::duration_cast<std::chrono::milliseconds>(end_crop - start_crop).count() << " ms" << std::endl;
     
-
     if (success) {
         // 在这里，mergedCloud 包含了合并后的点云数据
         std::cout << "PointCloud crop successful." << std::endl;

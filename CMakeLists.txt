@@ -22,14 +22,28 @@ link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
 # 添加源文件
-set(SOURCE_FILES cuda_pcl.cpp cuda_pcl.cu cuda_pcl.h)
-
+set(SOURCE_FILES
+    cuda_pcl.cpp
+    cuda_pcl.cu
+    lidar_utility.cpp
+    main.cpp
+)
 ## generate dynamic library
 # cuda_add_library(cuda_pcl_lib SHARED ${SOURCE_FILES})
 
 # 编译可执行文件
-cuda_add_executable(YourExecutable main.cpp cuda_pcl.cpp cuda_pcl.cu)
+cuda_add_executable(
+    YourExecutable cuda_pcl.cpp
+    cuda_pcl.cu
+    lidar_utility.cpp
+    main.cpp )
 # cuda_add_executable(YourExecutable main.cpp SOURCE_FILES)
 
 # 链接CUDA和PCL库
-target_link_libraries(YourExecutable ${CUDA_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(YourExecutable
+  ${CUDA_LIBRARIES}
+  ${PCL_LIBRARIES}
+  pcl_common
+  pcl_io
+  pcl_features
+)

@@ -52,4 +52,22 @@ bool cuda_crop_points(int threads,
                       pcl::PointCloud<PointXYZIRT>::Ptr& output_cloud,
                       float min_x, float max_x, float min_y, float max_y);
 
-                      
+class CudaPointCloudManager 
+{
+public:
+    CudaPointCloudManager(size_t max_points);
+    ~CudaPointCloudManager();
+    
+    // 批量处理多个点云
+    bool process_multiple_clouds(
+        const std::vector<pcl::PointCloud<PointXYZIRT>::Ptr>& input_clouds,
+        const std::vector<Eigen::Matrix4f>& transforms,
+        pcl::PointCloud<PointXYZIRT>::Ptr& output_cloud
+    );
+
+private:
+    PointXYZIRT* d_buffer1;  // 用于存储输入点云
+    PointXYZIRT* d_buffer2;  // 用于存储中间结果
+    float* d_transform_matrix;  // 用于存储变换矩阵
+    size_t buffer_size;
+};

@@ -69,7 +69,8 @@ cudaError_t cuda_merge_points_kernel_launch(int threads, PointXYZIRT *d_point_cl
 
 
 // CUDA 核函数，用于裁剪点云
-__global__ void cuda_crop_points_kernel(const PointXYZIRT* d_input_cloud, PointXYZIRT* d_output_cloud, size_t size, float min_x, float max_x, float min_y, float max_y, int* output_size) {
+__global__ void cuda_crop_points_kernel(const PointXYZIRT* d_input_cloud, PointXYZIRT* d_output_cloud, size_t size, float min_x, float max_x, float min_y, float max_y, int* output_size) 
+{
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     if (tid < size) {
 
